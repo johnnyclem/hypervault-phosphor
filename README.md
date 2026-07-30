@@ -1,2 +1,3 @@
-# hypervault-phosphor
-PHOSPHOR — Hypervault Web Audio synth + VGA/glitch video synth
+# PHOSPHOR — Hypervault Web Synth
+
+Playable Web Audio synth for Hypervault. See package.json scripts.
