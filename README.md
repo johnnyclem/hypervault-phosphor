@@ -1,15 +1,26 @@
-# PHOSPHOR published to Hypervault
+# PHOSPHOR — Hypervault Web Synth
 
-## Primary publish destinations
+Playable **Web Audio** synth keyboard for **Hypervault**.
 
-| Destination | URL |
-|---|---|
-| GitHub repo | https://github.com/johnnyclem/hypervault-phosphor |
-| Release v1.0.0 | https://github.com/johnnyclem/hypervault-phosphor/releases/tag/v1.0.0 |
-| Source tarball | https://github.com/johnnyclem/hypervault-phosphor/releases/download/v1.0.0/phosphor-hypervault.tar.gz |
-| Drive folder (Hypervault) | https://drive.google.com/drive/folders/1HFZ2wfdjcZCdHIBr924P_u37OIclaPB9 |
-| Parent Hypervault project | https://drive.google.com/drive/folders/1q3XSqA4llyByOvVfc1zfuTVbBjvPCLhO |
-| Vercel project | hypervault-phosphor (team: johnnyclem's projects) |
+## Live hub
+**https://phosphor-hypervault-hub.vercel.app**
+
+## Source
+- **Repo:** https://github.com/johnnyclem/hypervault-phosphor
+- **Release v1.0.0:** https://github.com/johnnyclem/hypervault-phosphor/releases/tag/v1.0.0
+- **Tarball:** https://github.com/johnnyclem/hypervault-phosphor/releases/download/v1.0.0/phosphor-hypervault.tar.gz
+
+## Drive (Hypervault)
+- **PHOSPHOR folder:** https://drive.google.com/drive/folders/1HFZ2wfdjcZCdHIBr924P_u37OIclaPB9
+- **Parent project:** https://drive.google.com/drive/folders/1q3XSqA4llyByOvVfc1zfuTVbBjvPCLhO
+
+## Features
+- On-screen piano + computer keyboard mapping
+- Waveforms, filter, ADSR, octave, volume
+- Oscilloscope + level meter
+- Web MIDI + live sampling/resample
+- Combo VGA / glitch / 8–16bit video synth
+- Audio unlocks after user gesture
 
 ## Run
 ```bash
@@ -18,7 +29,3 @@ cd hypervault-phosphor
 npm install
 npm run dev
 ```
-
-## Note
-A full Vercel production deploy of the complete source tree is ready in the repo.
-Connect the GitHub repo to the Vercel project **hypervault-phosphor** (or add `VERCEL_TOKEN` secret for the included GitHub Action) for automatic live hosting.
