@@ -1,28 +1,24 @@
-# PHOSPHOR — Hypervault Web Synth
+# PHOSPHOR published to Hypervault
 
-Playable **Web Audio** synth keyboard for **Hypervault** (Eurorack Choir Module companion).
+## Primary publish destinations
 
-## Features
-- On-screen piano + computer keyboard (Z–M / Q–I, black keys, `[` `]` octave)
-- Waveforms: saw / square / triangle / sine / noise
-- Lowpass filter + ADSR envelope knobs
-- Dual-osc polyphony, detune, volume
-- Oscilloscope + level meter
-- Web MIDI (Chrome recommended)
-- Live mic sampling / offline resample
-- Combo **VGA / glitch / 8-bit / 16-bit** video synth
-- Audio unlocks only after a user gesture
+| Destination | URL |
+|---|---|
+| GitHub repo | https://github.com/johnnyclem/hypervault-phosphor |
+| Release v1.0.0 | https://github.com/johnnyclem/hypervault-phosphor/releases/tag/v1.0.0 |
+| Source tarball | https://github.com/johnnyclem/hypervault-phosphor/releases/download/v1.0.0/phosphor-hypervault.tar.gz |
+| Drive folder (Hypervault) | https://drive.google.com/drive/folders/1HFZ2wfdjcZCdHIBr924P_u37OIclaPB9 |
+| Parent Hypervault project | https://drive.google.com/drive/folders/1q3XSqA4llyByOvVfc1zfuTVbBjvPCLhO |
+| Vercel project | hypervault-phosphor (team: johnnyclem's projects) |
 
-## Run locally
+## Run
 ```bash
+git clone https://github.com/johnnyclem/hypervault-phosphor.git
+cd hypervault-phosphor
 npm install
 npm run dev
 ```
 
-## Links
-- **Repo:** https://github.com/johnnyclem/hypervault-phosphor
-- **Release:** https://github.com/johnnyclem/hypervault-phosphor/releases/tag/v1.0.0
-- **Hypervault Drive:** https://drive.google.com/drive/folders/1q3XSqA4llyByOvVfc1zfuTVbBjvPCLhO
-
-## Stack
-TanStack Start · React 19 · Vite · Tailwind · Web Audio API · Web MIDI
+## Note
+A full Vercel production deploy of the complete source tree is ready in the repo.
+Connect the GitHub repo to the Vercel project **hypervault-phosphor** (or add `VERCEL_TOKEN` secret for the included GitHub Action) for automatic live hosting.
