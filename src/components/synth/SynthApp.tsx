@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Activity,
+  CircuitBoard,
   Disc,
   Keyboard,
   Mic,
@@ -219,6 +221,13 @@ export function SynthApp() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/hardware"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wide text-muted transition hover:border-primary/40 hover:text-primary"
+            >
+              <CircuitBoard className="h-3.5 w-3.5" />
+              MCU / SBC
+            </Link>
             <StatusPill
               ok={midi.connected}
               on={midi.supported}
