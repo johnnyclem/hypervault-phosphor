@@ -1,254 +1,268 @@
-# PHOSPHOR Video — MCU/SBC Architecture
+# PHOSPHOR Video — Single-board designs (your inventory)
 
 **Product line:** Hypervault / PHOSPHOR  
-**Module class:** Hybrid video synthesizer + modular control surface  
-**Revision:** A0 (design)
+**Revision:** A1 — **either SBC *or* MCU** (no dual-board requirement)  
+**Your kit:** RPi 5 · RPi Zero 1/2 · Teensy 4.1 · RP2040/RP2350 · DVI/HDMI Feathers
 
-## 1. Intent
+## Short answer
 
-Translate the browser PHOSPHOR video synth into a **rack-mountable / Eurorack-adjacent** instrument that:
+**Yes — pick one.** You do **not** need MCU + SBC together.
 
-- Treats **CV and GATE as first-class modulators** (not MIDI-only afterthoughts)
-- Accepts **live picture sources**: composite analog, MIPI/USB camera, IP streams
-- Renders **real-time effect modes** (VGA / glitch / 8-bit / 16-bit / combo) with hard timing
-- Stays repairable, open, and Eurorack-safe (protection, ranges, panel logic)
-
-## 2. System split (MCU + SBC)
-
-| Domain | Owner | Why |
-|---|---|---|
-| CV/GATE sample + scale + edge detect | **MCU** (hard real-time) | Deterministic µs timing, ADC continuous, no Linux jitter |
-| Panel UI (OLED/LEDs/encoders) | MCU | Instant response, works during SBC reboot |
-| Video capture / decode / mix / effects | **SBC** (GPU + ISP) | 720p/1080p frames, RTSP, OpenGL/Vulkan |
-| Network / IP streams | SBC | Ethernet, Wi‑Fi, WebRTC, RTSP |
-| Clock / frame sync orchestration | MCU ↔ SBC over SPI/UART | MCU can hard-trigger frame events |
-
-```
-                 ┌──────────────────────────────────────────┐
-  CV ×8  ──────► │  FRONTEND ANALOG (op-amps, clamps)       │
-  GATE ×4 ─────► │                                          │
-                 │         STM32H723 / RP2350                │
-                 │   ADC DMA · Schmitt · SPI slave · I²C     │
-                 └───────────────┬──────────────────────────┘
-                                 │ SPI @ 20–40 MHz (param bus)
-                                 │ + IRQ (gate edge)
-                 ┌───────────────▼──────────────────────────┐
-  CVBS ────────► │  VIDEO FRONTEND                          │
-  CAM CSI ─────► │  RK3588 / Raspberry Pi 5                 │
-  USB UVC ─────► │  V4L2 · GStreamer · GL/VK shaders        │
-  ETH/RTSP ────► │  HDMI out · Composite out (DAC)          │
-                 └──────────────────────────────────────────┘
-```
-
-### Recommended silicon
-
-| Role | Primary | Alternate | Notes |
+| Path | Board | What it does well | What it drops or weakens |
 |---|---|---|---|
-| MCU | **STM32H723VGT6** | RP2350 + external ADC | 16-bit ADC options via SPI; H7 has good timers |
-| SBC | **Radxa Rock 5B (RK3588)** | RPi 5 8GB | RK3588 has dual ISP + NPU + strong decode |
-| CV frontend | TL072 / OPA1678 | — | ±12V Eurorack → scaled 0–3.3V |
-| Video decoder | **ADV7280A-M** (CVBS→CSI) | TVP5150 + bridge | Prefer MIPI into SBC CSI |
-| Video encoder out | ADV7393 (composite) | built-in HDMI only | Keep CRT path alive |
-| Protection | BAT54S + polyfuse + TVS | — | Per jack |
+| **SBC-only** ★ | **Raspberry Pi 5** | Camera · USB video · IP streams · HDMI · full shader graph | GATE latency under load (still fine for modular video if tuned) |
+| **SBC-light** | Pi Zero 2 W | Generative + light CSI / simple streams | Heavy RTSP, dual sources, 1080p FX |
+| **Avoid as main** | Pi Zero 1 | Tiny experiments only | Real video synth |
+| **MCU-only** ★ | **RP2350 + DVI Feather** | Pure generative VGA/glitch/8–16bit · hard CV/GATE · Eurorack module | No IP; analog/camera need extra chips |
+| **MCU-only** | RP2040 + DVI Feather | Same idea, lower res / fewer effects | RAM/CPU ceiling |
+| **MCU control king** | **Teensy 4.1** | Best ADC + USB host; great CV brain | No native DVI Feather — pair with RP for video *or* use as CV-only later |
 
-## 3. I/O specification
+**Recommendation from your shelf:**
 
-### 3.1 CV inputs (×8) — modulators
-
-| Jack | Default mapping | Range | Rate |
-|---|---|---|---|
-| CV1 | Intensity | −5…+5 V bipolar | 4 kHz sample (oversampled) |
-| CV2 | Mode morph / palette | −5…+5 V | 4 kHz |
-| CV3 | Slice / glitch amount | −5…+5 V | 4 kHz |
-| CV4 | Hue / phosphor tint | −5…+5 V | 4 kHz |
-| CV5 | Zoom / crop | −5…+5 V | 1 kHz |
-| CV6 | Feedback / trail | −5…+5 V | 1 kHz |
-| CV7 | Source crossfade A↔B | 0…10 V unipolar option | 1 kHz |
-| CV8 | Master FX depth | −5…+5 V | 4 kHz |
-
-Each channel:
-
-- DC-coupled input, 100kΩ impedance
-- Attenuverter + offset trimpot (or digital attenuverter in firmware)
-- Clamped to ADC window, 12–16 bit effective after averaging
-- Optional sample-and-hold on GATE edge (per-channel flag)
-
-### 3.2 GATE / TRIG inputs (×4) — triggers
-
-| Jack | Default | Sense |
-|---|---|---|
-| G1 | Hard cut / freeze frame | Rising, 1.2 V thresh, 0–10 V tolerant |
-| G2 | Glitch burst | Rising or falling (menu) |
-| G3 | Palette step / mode advance | Rising |
-| G4 | Source switch / random seed | Rising |
-
-- Schmitt trigger + RC debounce (hardware) + digital re-arm
-- Latency target: **< 200 µs** jack edge → effect start (MCU path)
-- Can also clock internal LFO-rate sequencers for video parameters
-
-### 3.3 Optional CV outs (×2)
-
-| Jack | Use |
-|---|---|
-| CV OUT 1 | Envelope follower from video luma |
-| CV OUT 2 | Motion / glitch energy → modular |
-
-### 3.4 Video inputs
-
-| Path | Hardware | Formats |
-|---|---|---|
-| **Analog** | ADV7280A-M → CSI-2 | NTSC/PAL/SECAM composite; optional S-Video |
-| **Camera** | Native CSI (IMX219/477) or USB UVC | 720p–1080p |
-| **IP stream** | eth0 / wlan0 | RTSP H.264/H.265, WebRTC, SRT, HLS (decode) |
-
-### 3.5 Video outputs
-
-| Path | Hardware | Notes |
-|---|---|---|
-| HDMI | SBC native | Primary monitoring / capture |
-| Composite | ADV7393 from RGB/YCbCr | CRT / modular video ecosystem |
-| Network preview | WebRTC or MJPEG | Phone / laptop monitoring |
-
-## 4. Signal & processing pipeline
-
-```
-Source select ──► Capture (V4L2) ──► Normalize ──► Effect graph ──► Output
-                      ▲                  ▲
-                      │                  │
-                 IP decode          CV/GATE param bus
-                 (GStreamer)        (SPI ring buffer)
-```
-
-### Effect graph (maps from web PHOSPHOR)
-
-| Node | CV/GATE control |
-|---|---|
-| Input crop/scale | CV5 |
-| Feedback delay | CV6 |
-| Palette quantize (VGA/8/16) | CV2 + G3 |
-| Glitch slice offset | CV3 + G2 |
-| Scanline / CRT mask | CV8 |
-| Plasma/interference field | CV1 intensity |
-| Freeze / hard cut | G1 |
-| Source A/B crossfade | CV7 |
-
-Update loop:
-
-1. MCU DMA fills CV sample buffer @ 4 kHz  
-2. On GATE edge, MCU asserts IRQ + stamps param snapshot  
-3. SBC shader uniform upload every frame (or every 2 frames) from latest SPI packet  
-4. Luma analysis → optional CV OUT  
-
-## 5. Firmware / software stack
-
-### MCU (C / Rust, bare-metal or Zephyr)
-
-- ADC DMA continuous  
-- GATE EXTI interrupts  
-- SPI slave streaming `ParamFrame` structs  
-- OLED menu for attenuation, jack mapping, unipolar/bipolar  
-- Bootloader via USB-C DFU  
-
-`ParamFrame` (32 bytes, little-endian):
-
-```
-u16 sequence
-u16 gate_mask          // bit0..3 edges since last frame
-i16 cv[8]              // −32768..32767 ≡ −5V..+5V
-u8  flags              // sample-hold, bipolar masks
-u8  reserved[5]
-u32 timestamp_us
-```
-
-### SBC (Linux)
-
-| Layer | Choice |
-|---|---|
-| Capture | V4L2 + libcamera / GStreamer |
-| IP | GStreamer `rtspsrc` / `webrtcbin` |
-| Effects | OpenGL ES 3.1 fragment shaders (or Vulkan compute) |
-| UI | DRM/KMS fullscreen + optional web config on :8080 |
-| Control | `phosphor-video` daemon: SPI master + JSON patch API |
-| Sync | Prefer free-running 60 fps; optional genlock later |
-
-### Shader modes (parity with web)
-
-- `vga` — 16-color nearest palette  
-- `bit8` — phosphor green set  
-- `bit16` — RGB555 quantize  
-- `glitch` — row slice + posterize  
-- `combo` — blend + magenta flecks  
-
-## 6. Mechanical / panel
-
-### Option A — Eurorack 42HP (recommended first SKU)
-
-- 3U, 42HP aluminum panel  
-- Top: 8 CV + 4 GATE mini-jacks  
-- Mid: source LEDs, mode encoder, OLED 128×64  
-- Bottom: HDMI mini, USB-C power/data, 3.5 mm composite in/out  
-- Depth: ~45 mm (SBC as mezzanine or external compute brick on ribbon)
-
-### Option B — 1U desktop “Compute Brick” + 20HP I/O panel
-
-- SBC lives in a metal brick with heatsink  
-- Thin Eurorack panel is pure I/O + MCU  
-- Better thermals for RK3588  
-
-Power:
-
-- Eurorack: +12V / −12V / +5V (MCU + analog)  
-- SBC: 5V/5A USB-C PD or barrel (isolated from modular rail)
-
-## 7. BOM sketch (prototype A0)
-
-| Item | Qty | Est. |
-|---|---|---|
-| STM32H723 dev / custom PCB | 1 | $12–25 |
-| Rock 5B 8GB or Pi 5 8GB | 1 | $80–120 |
-| ADV7280A-M module | 1 | $25–40 |
-| ADV7393 module (optional) | 1 | $15–25 |
-| Op-amp frontends + jacks | 12 | $30 |
-| OLED + encoder + LEDs | 1 set | $15 |
-| Panel + PCB fab (JLCPCB) | 1 | $40–80 |
-| Misc (TVS, fuses, connectors) | — | $20 |
-| **Prototype total** | | **~$250–350** |
-
-## 8. Safety & modular best practices
-
-- All jacks ESD + overvoltage clamped before op-amps  
-- No DC path from ±12 V rails into SBC GPIO  
-- Opto or digital isolator on SPI if sharing chassis with dirty grounds  
-- Hot-plug CV/GATE safe  
-- Composite AC-coupled with proper 75 Ω termination  
-
-## 9. Bring-up plan
-
-1. **MCU only** — CV meters on OLED, GATE LEDs, SPI loopback  
-2. **SBC shaders** — test patterns with fake SPI params over UDP  
-3. **CSI camera** — 720p → glitch shader  
-4. **ADV7280** — composite camera/VCR → same graph  
-5. **RTSP** — IP cam decode → source B, CV7 crossfade  
-6. **GATE latency** — measure G1 → freeze with scope  
-7. **Panel integration** — full 42HP prototype  
-
-## 10. Open questions
-
-- Genlock to external video vs free-run (cost vs pro video sync)  
-- Whether NPU assists style transfer later (optional Hypervault “choir vision”)  
-- MIDI TRS-A as secondary control bus  
-- Multi-module chain: share SPI/I²S clock between choir + video  
-
-## 11. Relationship to web PHOSPHOR
-
-| Web | Hardware |
-|---|---|
-| Audio analyser drives intensity | CV1 + optional audio envelope MCU |
-| Mouse/touch knobs | Encoders + CV attenuverters |
-| Canvas 2D palette loops | GPU fragment shaders |
-| Single media source (mic) | Multi-source: CVBS / CSI / UVC / RTSP |
-| Browser MIDI | CV/GATE + optional MIDI |
+1. **Full multi-source instrument → Pi 5 only**  
+2. **Tight Eurorack generative video module → RP2350 + DVI Feather only**  
+3. Hybrid MCU+SBC is optional later if Pi 5 GATE timing ever feels soft — not day one.
 
 ---
 
-*Hypervault — PHOSPHOR Video MCU/SBC Design A0*
+## Path A — SBC only (Raspberry Pi 5)
+
+### Why this works alone
+
+Linux + GPU + CSI + USB + network is exactly what multi-source video needs. CV and GATE are “just” protected GPIO + ADC — good enough for video-rate modulation (you are not doing audio-rate FM).
+
+### Block diagram
+
+```
+  CV ×8 ──► op-amps + clamp ──► SPI ADC (ADS1115×2 or MCP3008×2)
+  GATE ×4 ──► schmitt ──► GPIO (pigpio / libgpiod, isolcpus optional)
+
+  CSI cam ──┐
+  USB UVC ──┼──► V4L2 / GStreamer ──► GLES shaders ──► HDMI
+  RTSP/IP ──┘         ▲
+                      │ params from ADC + GPIO thread
+```
+
+### Parts you still need (cheap)
+
+| Piece | Role |
+|---|---|
+| Op-amp frontend (TL072 etc.) | ±5 V / 0–10 V → 0–3.3 V |
+| **ADS1115** (I²C) or MCP3008 (SPI) | 4–8 CV channels |
+| TVS + series R + schmitt | GATE safety |
+| Optional: USB composite capture | Analog CVBS without CSI decoder |
+| Optional: Pi Camera Module 3 | CSI path |
+
+No second MCU required. Optional later: RP2040 as USB-CDC “CV dongle” if you want cleaner sampling — still not a second brain for video.
+
+### Software sketch
+
+- `phosphor-video` daemon (C++/Rust/Python):
+  - Thread A: poll ADC + GPIO @ 1–4 kHz → shared atomics  
+  - Thread B: GStreamer / DRM + GLES effect graph @ 30–60 fps  
+- Modes: `vga` · `glitch` · `bit8` · `bit16` · `combo` (same as web)
+- Sources: `csi` · `uvc` · `rtsp://…` · `test`
+
+### Pi 5 CV/GATE reliability tips
+
+- Pin high-priority poller with `SCHED_FIFO` or use **pigpio** wave/alerts for GATE edges  
+- `isolcpus` + `nohz_full` for the video core if GATE ever glitches under RTSP load  
+- Sample CV at 1 kHz first — video uniforms don’t need audio-rate  
+
+### Pi Zero 2 W variant
+
+- Generative + single CSI or single low-bitrate RTSP  
+- Drop dual-source crossfade and 1080p  
+- Still valid “pocket” Hypervault node  
+
+### Pi Zero 1
+
+- Skip for this product (use as MIDI/USB gadget toy only)
+
+---
+
+## Path B — MCU only (RP2040 / RP2350 + DVI Feather)
+
+### Why this works alone
+
+PicoDVI / HSTX DVI on Feather boards is a **known-good** path for 320×240–640×480 “VGA/glitch/8-bit” looks — closer to the web PHOSPHOR aesthetic than a full 1080p GPU path, and excellent as a Eurorack module.
+
+### Block diagram
+
+```
+  CV ×8 ──► frontend ──► external ADC (MCP3208 / ADS131) ──► SPI
+  GATE ×4 ──► GPIO IRQ
+
+  RP2040 / RP2350 ──► DVI/HDMI Feather ──► monitor / scaler / CRT via adapter
+       │
+       └── internal generators (plasma, feedback buffer, palette quantize)
+```
+
+### Capability matrix
+
+| Feature | RP2040 + DVI | RP2350 + DVI | Notes |
+|---|---|---|---|
+| Generative video | Yes | Yes | Higher res / layers on 2350 |
+| CV/GATE | Yes (+ ADC IC) | Yes | Hard realtime |
+| HDMI/DVI out | Feather | Feather | Use what you have |
+| CSI camera | No* | No* | *needs external bridge + huge firmware |
+| Analog CVBS in | No* | No* | Needs video decoder + line store |
+| IP stream | No | No | No Ethernet stack for video decode |
+| Eurorack fit | Excellent | Excellent | Low power, small PCB |
+
+### Firmware stack
+
+- **Arduino / Pico SDK / CircuitPython** (your call; SDK for max DVI bandwidth)  
+- Double-buffered framebuffer → DVI serializer  
+- Effect modes as scanline shaders (palette, slice glitch, phosphor tint)  
+- GATE EXTI mutates mode flags immediately  
+- CV updates parameters each frame (or each line for wilder looks)
+
+### Resolution targets
+
+| Chip | Comfortable | Stretch |
+|---|---|---|
+| RP2040 | 320×240 / 360×240 | 640×480 simple 8-color |
+| RP2350 | 640×480 / 720×400 | Multi-layer feedback |
+
+This matches the **web combo VGA/glitch/8–16bit** look better than fighting for 1080p on a microcontroller.
+
+---
+
+## Path C — Teensy 4.1 (where it shines)
+
+Teensy 4.1 is the **best pure-control MCU** in your drawer:
+
+- Fast ADC, many pins, PSRAM, USB host  
+- Great for **8+ CV + 4 GATE + OLED** with zero Linux drama  
+
+It does **not** pair with your RP DVI Feathers natively. Options:
+
+1. **Teensy as the whole module** using VGA/parallel TFT / existing Teensy video libraries (different from DVI Feather path)  
+2. **Teensy as CV frontend only** talking UART/SPI to Pi 5 or RP2350 — only if you later want luxury sampling  
+3. **Skip Teensy for video v1** and keep it for a separate Hypervault audio/CV utility  
+
+**For “just one brain”:** prefer **Pi 5** or **RP2350+DVI**, not Teensy-as-DVI.
+
+---
+
+## Feature coverage by path
+
+| Requirement | Pi 5 only | Zero 2 only | RP2350+DVI | RP2040+DVI | Teensy alone |
+|---|---|---|---|---|---|
+| On-screen keys (N/A hw) | — | — | — | — | — |
+| CV modulators | Yes (ADC) | Yes | Yes | Yes | Best ADC |
+| GATE triggers | Yes* | Yes* | Best | Best | Best |
+| VGA/glitch/8–16 modes | Yes (GPU) | Partial | Yes (native look) | Yes | If display path exists |
+| HDMI/DVI out | Native | Mini/micro adapters | Feather | Feather | Extra hardware |
+| Analog video in | USB capture / CSI decoder | Hard | Extra silicon | Extra silicon | Extra |
+| Camera | CSI / UVC | CSI light | No | No | No |
+| IP stream | Yes | Light | No | No | No |
+| Live sampling audio | Yes (USB/I2S) | Yes | Optional I2S | Optional | Yes (audio shield) |
+
+\*Pi GATE is software-timed; fine for video if you prioritize the poller.
+
+---
+
+## Decide in one line
+
+| If you want… | Build… |
+|---|---|
+| Camera + IP + analog capture + HDMI | **Pi 5 only** |
+| Small rack generative glitch box, hard CV/GATE | **RP2350 + DVI Feather only** |
+| Cheapest/fastest first light | **RP2040 + DVI Feather** generative demo |
+| Best CV metering / utility module | **Teensy 4.1** (not the video out path) |
+
+---
+
+## Shared Eurorack frontend (both paths)
+
+Same analog front end whether the brain is Pi or RP:
+
+- 100 kΩ input impedance  
+- Attenuverter (or digital scale in firmware)  
+- Clamp to 0–3.3 V  
+- TVS + polyfuse per jack  
+- GATE: schmitt, 0–10 V tolerant, ~1.2 V threshold  
+
+Jack map can stay identical to A0 (CV1–8, G1–4).
+
+### Default CV map (unchanged)
+
+| Jack | Role |
+|---|---|
+| CV1 | Intensity |
+| CV2 | Mode / palette morph |
+| CV3 | Glitch slice |
+| CV4 | Hue / phosphor |
+| CV5 | Zoom / crop (Pi) or scale (MCU) |
+| CV6 | Feedback / trail |
+| CV7 | Source A↔B (Pi) or layer mix (MCU) |
+| CV8 | Master FX depth |
+| G1 | Freeze |
+| G2 | Glitch burst |
+| G3 | Mode step |
+| G4 | Source / seed |
+
+---
+
+## BOM deltas (using what you own)
+
+### Pi 5 path (buy list)
+
+| Item | Notes |
+|---|---|
+| RPi 5 (yours) | Main brain |
+| ADC breakout ×1–2 | ADS1115 or MCP3008 |
+| Op-amps + jacks + protection | CV/GATE front |
+| Camera Module or USB cam | Optional day one |
+| USB CVBS capture | If you want analog in without CSI decoder |
+| 42HP panel | Optional |
+
+### RP + DVI path (buy list)
+
+| Item | Notes |
+|---|---|
+| RP2350 or RP2040 (yours) | Main brain |
+| DVI/HDMI Feather (yours) | Video out |
+| MCP3208 or similar | 8ch CV |
+| Op-amps + jacks + protection | Same frontend |
+| Panel + 5 V power | Eurorack or USB-C |
+
+---
+
+## Bring-up (pick one track)
+
+### Track Pi 5
+
+1. GLES test pattern + keyboard param control  
+2. ADS1115 CV meters on HDMI overlay  
+3. GATE freeze/glitch wired  
+4. CSI or UVC source  
+5. RTSP source + CV7 crossfade  
+6. USB composite capture (optional)  
+
+### Track RP + DVI
+
+1. Solid color / raster over DVI Feather  
+2. Palette quantize (VGA16 + phosphor)  
+3. Scanline glitch + feedback buffer  
+4. ADC CV → uniforms  
+5. GATE IRQ → freeze / mode step  
+6. Panelize  
+
+---
+
+## Hybrid later (optional, not required)
+
+If Pi 5 GATE ever feels soft under dual 1080p decode:
+
+```
+RP2040 (CV/GATE only) --USB CDC or SPI--> Pi 5 (video)
+```
+
+That is a **sensor dongle**, not a second architecture. Start single-board.
+
+---
+
+*Hypervault — PHOSPHOR Video Design A1 · single-brain*
